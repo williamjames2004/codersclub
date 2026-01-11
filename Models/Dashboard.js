@@ -8,7 +8,14 @@ const dashboardSchema = new mongoose.Schema({
       quiz_name: String,
       total_points: Number,
       points_obtained: Number,
-      percentage: Number
+      percentage: Number,
+      qtns: [
+        {
+          qtn_id: String,
+          obtained_score: Number,
+          max_score: Number
+        }
+      ]
     }
   ],
   ratings: Number
