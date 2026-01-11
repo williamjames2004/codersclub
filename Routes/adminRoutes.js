@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Admin = require('../Models/Admin');
 const Dashboard = require('../Models/Dashboard');
+const bcrypt = require("bcryptjs");
+const Quiz = require('../Models/Quiz');
 
 //Helper function
 const generateAdminId = async (adminType) => {
@@ -23,6 +25,8 @@ const generateAdminId = async (adminType) => {
 
   if (adminType === "Professor") prefix = "pf";
   if (adminType === "Special") prefix = "sp";
+  if (adminType === "Master") prefix = "master";
+  if (adminType === "Dev") prefix = "dev";
 
   const lastAdmin = await Admin.findOne({
     admin_id: { $regex: `^${prefix}` }
@@ -45,16 +49,21 @@ router.post("/adminRegister", async (req, res) => {
     // Generate admin_id automatically
     const admin_id = await generateAdminId(adminType);
 
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     const admin = await Admin.create({
       admin_id,
       name,
-      password,
+      password: hashedPassword,
       adminType
     });
 
     res.json({
       success: true,
-      admin
+      admin_id,
+      adminType
     });
 
   } catch (error) {
@@ -66,15 +75,74 @@ router.post("/adminRegister", async (req, res) => {
 });
 
 router.post("/adminlogin", async (req, res) => {
-  const { admin_id, password } = req.body;
+  try {
+    const { admin_id, password } = req.body;
 
-  const admin = await Admin.findOne({ admin_id, password });
+    // Find admin by admin_id
+    const admin = await Admin.findOne({ admin_id });
 
-  if (!admin) return res.json({ success: false });
+    if (!admin) {
+      return res.json({ success: false, message: "Invalid Admin ID" });
+    }
 
-  res.json({ success: true, admin_id });
+    // Compare password
+    const isMatch = await bcrypt.compare(password, admin.password);
+
+    if (!isMatch) {
+      return res.json({ success: false, message: "Invalid Password" });
+    }
+
+    // Login success → return adminType
+    res.json({
+      success: true,
+      admin_id: admin.admin_id,
+      adminType: admin.adminType
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 });
+router.post("/findallquiz", async (req,res)=> {
+  try{
+    const {admin_id} = req.body;
+    const quizzes = await Quiz.find({created_by: admin_id});
+    return res.status(200).json({success: true, quizzes});
+  } catch (error){
+    return res.status(500).json({success: false, error: error.message});
+  }
+});
+router.post("/deletequiz", async (req, res) => {
+  try {
+    const { admin_id, quiz_id } = req.body;
 
+    const quiz = await Quiz.findOneAndDelete({
+      quiz_id: quiz_id,
+      admin_id: admin_id
+    });
+
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz not found or unauthorized"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Quiz deleted successfully"
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 router.post("/quiz-dashboard", async (req, res) => {
   try {
     const { quiz_id } = req.body;
