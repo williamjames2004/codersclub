@@ -4,57 +4,89 @@ const User = require('../Models/User');
 const Dashboard = require('../Models/Dashboard');
 
 router.post("/register", async (req, res) => {
-  const {
-    user_id,
-    username,
-    regno,
-    phoneno,
-    email,
-    department,
-    createpassword,
-    confirmpassword
-  } = req.body;
+  try {
+    const {
+      user_id,
+      username,
+      regno,
+      phoneno,
+      email,
+      department,
+      createpassword,
+      confirmpassword
+    } = req.body;
 
-  if (createpassword !== confirmpassword) {
-    return res.json({ success: false, message: "Passwords mismatch" });
+    if (createpassword !== confirmpassword) {
+      return res.json({ success: false, message: "Passwords mismatch" });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(createpassword, salt);
+
+    const user = new User({
+      user_id,
+      username,
+      regno,
+      mobileno: phoneno,
+      email,
+      department,
+      password: hashedPassword,
+      plain_password: createpassword   
+    });
+
+    await user.save();
+
+    // Create empty dashboard
+    await Dashboard.create({
+      user_id,
+      attempted_quizzes: [],
+      ratings: 0
+    });
+
+    res.json({ success: true });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
-
-  const user = new User({
-    user_id,
-    username,
-    regno,
-    mobileno: phoneno,
-    email,
-    department,
-    password: createpassword,
-    plain_password: createpassword
-  });
-
-  await user.save();
-
-  // create empty dashboard
-  await Dashboard.create({
-    user_id,
-    attempted_quizzes: [],
-    ratings: 0
-  });
-
-  res.json({ success: true });
 });
 
 router.post("/login", async (req, res) => {
-  const { user_id, password } = req.body;
+  try {
+    const { user_id, password } = req.body;
 
-  const user = await User.findOne({ user_id, password });
+    // Find user by user_id
+    const user = await User.findOne({ user_id });
 
-  if (!user) {
-    return res.json({ success: false });
+    if (!user) {
+      return res.json({ success: false, message: "Invalid User ID" });
+    }
+
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.json({ success: false, message: "Invalid Password" });
+    }
+
+    // Login success
+    res.json({
+      success: true,
+      user_id: user.user_id
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
-
-  res.json({ success: true, user_id });
 });
+
 router.post("/getuser", async (req,res) => {
-  console.log("received");
   const {user_id} = req.body;
 
   const user = await User.findOne({user_id: user_id});
@@ -63,6 +95,15 @@ router.post("/getuser", async (req,res) => {
   }
   res.json({success: true, data: user});
 });
+router.get("/allusers", async (req,res)=>{
+  try {
+    const user = await User.find();
+    return res.status(200).json({success: true,user});
+  } catch (error){
+    return res.status(500).json({success:false,message: "Internal server error", error: error.message});
+  }
+
+})
 router.post("/student-dashboard", async (req, res) => {
   try {
     const { user_id } = req.body;
