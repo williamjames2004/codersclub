@@ -23,7 +23,9 @@ const adminSchema = new mongoose.Schema({
       "ViceSecretary",
       "Volunteer",
       "Professor",
-      "Special"
+      "Special",
+      "Master",
+      "Dev"
     ],
     required: true
   }
