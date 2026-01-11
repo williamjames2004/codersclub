@@ -135,6 +135,33 @@ router.post("/all", async (req, res) => {
   }
 });
 
+router.post("/updateQuizFlag", async (req, res) => {
+  try {
+    const { quiz_id, field, value } = req.body;
+
+    const allowedFields = [
+      "shuffle_questions",
+      "shuffle_options",
+      "is_active",
+      "is_public"
+    ];
+
+    if (!allowedFields.includes(field)) {
+      return res.status(400).json({ success: false, message: "Invalid field" });
+    }
+
+    const quiz = await Quiz.findOneAndUpdate(
+      { quiz_id },
+      { [field]: value },
+      { new: true }
+    );
+
+    res.json({ success: true, quiz });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.put("/submitanswer", async (req, res) => {
   try {
     const { user_id, attended_quiz } = req.body;
@@ -232,4 +259,6 @@ router.put("/submitanswer", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
 module.exports = router;
