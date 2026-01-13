@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../Models/User');
 const Dashboard = require('../Models/Dashboard');
+const bcrypt = require("bcryptjs");
 
 router.post("/register", async (req, res) => {
   try {
@@ -157,4 +158,5 @@ router.post("/student-dashboard", async (req, res) => {
   }
 });
 module.exports = router;
+
 
