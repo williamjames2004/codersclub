@@ -44,7 +44,7 @@ router.post("/register", async (req, res) => {
       ratings: 0
     });
 
-    res.json({ success: true });
+    res.status(200).json({ success: true });
 
   } catch (error) {
     res.status(500).json({
@@ -157,3 +157,4 @@ router.post("/student-dashboard", async (req, res) => {
   }
 });
 module.exports = router;
+
