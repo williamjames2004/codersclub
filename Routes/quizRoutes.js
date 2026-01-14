@@ -3,6 +3,23 @@ const router = express.Router();
 const Quiz = require('../Models/Quiz');
 const Dashboard = require('../Models/Dashboard');
 
+function calculateQuizStats(qtns) {
+  let total_points = 0;
+  let points_obtained = 0;
+
+  qtns.forEach(q => {
+    total_points += Number(q.max_score || 0);
+    points_obtained += Number(q.obtained_score || 0);
+  });
+
+  const percentage =
+    total_points === 0
+      ? 0
+      : Number(((points_obtained / total_points) * 100).toFixed(2));
+
+  return { total_points, points_obtained, percentage };
+}
+
 // CREATE QUIZ
 router.post("/create", async (req, res) => {
   try {
@@ -10,8 +27,11 @@ router.post("/create", async (req, res) => {
       quiz_name,
       category,
       description,
+      mode,
       difficulty,
       time_limit,
+      max_attempt,
+      password,
       qtns,
       created_by
     } = req.body;
@@ -49,6 +69,9 @@ router.post("/create", async (req, res) => {
         points: qtn.points
       };
     });
+    if(mode !== "mode1" && mode !== "mode2" && mode !== "mode3"){
+      return res.status(400).json({success: false, message: "Invalied mode choice"});
+    }
 
     /* ---------------------------
        3. Create Quiz
@@ -58,9 +81,12 @@ router.post("/create", async (req, res) => {
       quiz_name,
       category,
       description,
+      mode,
       difficulty,
       time_limit,
+      max_attempt,
       total_points,
+      password,
       qtns: updatedQtns,
       created_by
     });
@@ -164,101 +190,108 @@ router.post("/updateQuizFlag", async (req, res) => {
 
 router.put("/submitanswer", async (req, res) => {
   try {
-    const { user_id, attended_quiz } = req.body;
-    const { quiz_id, qtns } = attended_quiz;
+    const { user_id, attempted_quizzes } = req.body;
+    console.log("success");
 
-    // 1. Find dashboard
+    if (!user_id || !attempted_quizzes || !attempted_quizzes.length) {
+      return res.status(400).json({ error: "Invalid request data" });
+    }
+
+    const { quiz_id, qtns } = attempted_quizzes[0];
+
+    if (!quiz_id || !Array.isArray(qtns) || !qtns.length) {
+      return res.status(400).json({ error: "Invalid quiz or question data" });
+    }
+
+    // 1️⃣ Find dashboard
     let dashboard = await Dashboard.findOne({ user_id });
-    let quizcollection = await Quiz.findOne({quiz_id});
-    const quiz_name = quizcollection.quiz_name;
 
-    // 2. If dashboard not exists → create with first quiz & question
+    // 2️⃣ Get quiz name safely
+    const quizDoc = await Quiz.findOne({ quiz_id });
+    const quiz_name = quizDoc?.quiz_name || "Unknown Quiz";
+
+    // 3️⃣ If dashboard does NOT exist
     if (!dashboard) {
+      const stats = calculateQuizStats(qtns);
+
       dashboard = new Dashboard({
         user_id,
         attempted_quizzes: [
           {
             quiz_id,
             quiz_name,
-            qtns: [qtns],
-            total_points: qtns.max_score,
-            points_obtained: qtns.obtained_score,
-            percentage:
-              qtns.max_score === 0
-                ? 0
-                : Number(((qtns.obtained_score / qtns.max_score) * 100).toFixed(2))
+            qtns,
+            total_points: stats.total_points,
+            points_obtained: stats.points_obtained,
+            percentage: stats.percentage
           }
         ]
       });
 
       await dashboard.save();
-      return res.status(201).json({ message: "First question submitted" });
+      return res.status(201).json({
+        message: "Dashboard created & quiz saved",
+        ...stats
+      });
     }
 
-    // 3. Find quiz
+    // 4️⃣ Dashboard exists → find quiz
     let quiz = dashboard.attempted_quizzes.find(
       q => q.quiz_id === quiz_id
     );
 
-    // 4. If quiz not exists → create quiz with first question
+    // 5️⃣ Quiz does NOT exist
     if (!quiz) {
+      const stats = calculateQuizStats(qtns);
+
       dashboard.attempted_quizzes.push({
         quiz_id,
         quiz_name,
-        qtns: [qtns],
-        total_points: qtns.max_score,
-        points_obtained: qtns.obtained_score,
-        percentage:
-          qtns.max_score === 0
-            ? 0
-            : Number(((qtns.obtained_score / qtns.max_score) * 100).toFixed(2))
+        qtns,
+        total_points: stats.total_points,
+        points_obtained: stats.points_obtained,
+        percentage: stats.percentage
       });
 
       await dashboard.save();
-      return res.status(200).json({ message: "Quiz started & question submitted" });
+      return res.status(200).json({
+        message: "Quiz added to dashboard",
+        ...stats
+      });
     }
 
-    // 5. Quiz exists → update or insert question
-    const qtnIndex = quiz.qtns.findIndex(
-      q => q.qtn_id === qtns.qtn_id
-    );
+    // 6️⃣ Quiz exists → merge questions properly
+    qtns.forEach(incomingQtn => {
+      const index = quiz.qtns.findIndex(
+        q => q.qtn_id === incomingQtn.qtn_id
+      );
 
-    if (qtnIndex !== -1) {
-      quiz.qtns[qtnIndex] = qtns; // overwrite
-    } else {
-      quiz.qtns.push(qtns);
-    }
-
-    // 6. Recalculate quiz summary
-    let total_points = 0;
-    let points_obtained = 0;
-
-    quiz.qtns.forEach(q => {
-      total_points += q.max_score;
-      points_obtained += q.obtained_score;
+      if (index !== -1) {
+        quiz.qtns[index] = incomingQtn; // overwrite
+      } else {
+        quiz.qtns.push(incomingQtn);
+      }
     });
 
-    quiz.total_points = total_points;
-    quiz.points_obtained = points_obtained;
-    quiz.percentage =
-      total_points === 0
-        ? 0
-        : Number(((points_obtained / total_points) * 100).toFixed(2));
+    // 7️⃣ Recalculate quiz stats
+    const stats = calculateQuizStats(quiz.qtns);
+
+    quiz.total_points = stats.total_points;
+    quiz.points_obtained = stats.points_obtained;
+    quiz.percentage = stats.percentage;
 
     await dashboard.save();
 
     res.status(200).json({
-      message: "Question submitted & quiz updated",
-      total_points,
-      points_obtained,
-      percentage: quiz.percentage
+      message: "Quiz updated successfully",
+      quiz_id,
+      ...stats
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Submit Answer Error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 module.exports = router;
