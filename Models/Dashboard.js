@@ -12,6 +12,8 @@ const dashboardSchema = new mongoose.Schema({
       qtns: [
         {
           qtn_id: String,
+          submited_answer: String,    //Newly added
+          correct_answer: String,     //Newly added
           obtained_score: Number,
           max_score: Number
         }
