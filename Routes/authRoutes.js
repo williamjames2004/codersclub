@@ -125,6 +125,8 @@ router.post("/student-dashboard", async (req, res) => {
       percentage: q.percentage,
       qtns: q.qtns.map(qtn => ({
         qtn_id: qtn.qtn_id,
+        submited_answer: qtn.submited_answer,
+        correct_answer: qtn.correct_answer,
         obtained_score: qtn.obtained_score,
         max_score: qtn.max_score
       }))
@@ -158,5 +160,3 @@ router.post("/student-dashboard", async (req, res) => {
   }
 });
 module.exports = router;
-
-
