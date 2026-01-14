@@ -7,6 +7,7 @@ const quizSchema = new mongoose.Schema(
 
     category: String,
     description: String,
+    mode: {type: String, enum: ["mode1", "mode2", "mode3"]},
 
     difficulty: {
       type: String,
@@ -22,8 +23,8 @@ const quizSchema = new mongoose.Schema(
     is_active: { type: Boolean, default: true },
     is_public: { type: Boolean, default: true },
 
-    attempt_count: { type: Number, default: 0 },
     max_attempt: { type: Number, default: 1 },
+    password: String,
 
     qtns: [
       {
