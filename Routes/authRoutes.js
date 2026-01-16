@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../Models/User');
 const Dashboard = require('../Models/Dashboard');
 const bcrypt = require("bcryptjs");
+const Messages = require("../Models/Messages");
 
 router.post("/register", async (req, res) => {
   try {
@@ -157,6 +158,31 @@ router.post("/student-dashboard", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+router.put("/sendmessage", async (req, res) => {
+  try {
+    const { user_id, feedback, suggestions, complains } = req.body;
+
+    const data = await Messages.create({
+      user_id,
+      feedback,
+      suggestions,
+      complains
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Message sent successfully",
+      data
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 module.exports = router;
