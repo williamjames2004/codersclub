@@ -32,16 +32,25 @@ router.post("/create", async (req, res) => {
       time_limit,
       max_attempt,
       password,
-      qtns,
       created_by
     } = req.body;
 
-    if (!quiz_name || !qtns || qtns.length === 0) {
-      return res.json({ success: false, message: "Invalid input" });
+    if (!quiz_name || !mode || !created_by) {
+      return res.status(400).json({
+        success: false,
+        message: "Required fields missing"
+      });
+    }
+
+    if (!["mode1", "mode2", "mode3"].includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid mode"
+      });
     }
 
     /* ---------------------------
-       1. Generate quiz_id
+       Generate quiz_id
     ----------------------------*/
     const lastQuiz = await Quiz.findOne().sort({ createdAt: -1 });
 
@@ -54,27 +63,7 @@ router.post("/create", async (req, res) => {
     const quiz_id = `quiz_${String(quizNumber).padStart(4, "0")}`;
 
     /* ---------------------------
-       2. Generate qtn_id & total_points
-    ----------------------------*/
-    let total_points = 0;
-
-    const updatedQtns = qtns.map((qtn, index) => {
-      total_points += qtn.points || 0;
-
-      return {
-        qtn_id: `${quiz_id}_qtn${index + 1}`,
-        qtn: qtn.qtn,
-        options: qtn.options,
-        correct_answer: qtn.correct_answer,
-        points: qtn.points
-      };
-    });
-    if(mode !== "mode1" && mode !== "mode2" && mode !== "mode3"){
-      return res.status(400).json({success: false, message: "Invalied mode choice"});
-    }
-
-    /* ---------------------------
-       3. Create Quiz
+       Create quiz (no questions)
     ----------------------------*/
     const quiz = new Quiz({
       quiz_id,
@@ -85,10 +74,10 @@ router.post("/create", async (req, res) => {
       difficulty,
       time_limit,
       max_attempt,
-      total_points,
       password,
-      qtns: updatedQtns,
-      created_by
+      created_by,
+      total_points: 0,
+      qtns: []
     });
 
     await quiz.save();
@@ -99,9 +88,72 @@ router.post("/create", async (req, res) => {
       quiz_id
     });
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+
+router.post("/add-questions", async (req, res) => {
+  try {
+    const { quiz_id, qtns } = req.body;
+
+    if (!quiz_id || !qtns || qtns.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Quiz ID and questions required"
+      });
+    }
+
+    const quiz = await Quiz.findOne({ quiz_id });
+
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz not found"
+      });
+    }
+
+    /* ---------------------------
+       Generate qtn_id & points
+    ----------------------------*/
+    let total_points = quiz.total_points || 0;
+
+    const updatedQtns = qtns.map((qtn, index) => {
+      total_points += qtn.points || 0;
+
+      return {
+        qtn_id: `${quiz_id}_qtn${quiz.qtns.length + index + 1}`,
+        qtn: qtn.qtn,
+        options: qtn.options,
+        correct_answer: qtn.correct_answer,
+        points: qtn.points
+      };
+    });
+
+    /* ---------------------------
+       Update quiz
+    ----------------------------*/
+    quiz.qtns.push(...updatedQtns);
+    quiz.total_points = total_points;
+
+    await quiz.save();
+
+    res.json({
+      success: true,
+      message: "Questions added successfully",
+      total_points
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 });
 
@@ -133,7 +185,7 @@ router.post("/all", async (req, res) => {
   try {
     const { user_id } = req.body;
 
-    const dashboard = await Dashboard.findOne({ user_id });
+    const dashboard = await Dashboard.findOne({ user_id }); 
 
     // Case 1: No dashboard → no quizzes attempted → show all
     if (!dashboard || dashboard.attempted_quizzes.length === 0) {
@@ -160,6 +212,14 @@ router.post("/all", async (req, res) => {
     });
   }
 });
+router.get("/all", async (req,res)=>{
+  try{
+    const quizzes = await Quiz.find();
+    return res.status(200).json({success: true, quizzes});
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+})
 
 router.post("/updateQuizFlag", async (req, res) => {
   try {
