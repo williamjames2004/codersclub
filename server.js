@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 const authRoutes = require("./Routes/authRoutes");
 const adminRoutes = require("./Routes/adminRoutes");
 const quizRoutes = require("./Routes/quizRoutes");
+const buzzerRoutes = require("./Routes/buzzerRoutes");
 
 const app = express();
 
@@ -21,6 +22,7 @@ connectDB();
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/quiz", quizRoutes);
+app.use("/buzzer", buzzerRoutes);
 
 /* Test Route */
 app.get("/", (req, res) => {
