@@ -8,6 +8,7 @@ const tempdata = require('../Models/TempData');
 const bcrypt = require("bcryptjs");
 const Quiz = require('../Models/Quiz');
 const upload = require("../middlewares/upload");
+const AdminPermission = require("../Models/AdminPermission");
 
 //Helper function
 const generateAdminId = async (adminType) => {
@@ -60,12 +61,19 @@ router.post("/adminRegister", async (req, res) => {
         ? "professor"
         : "student";
 
+    // 1️⃣ Create Admin
     const admin = await Admin.create({
       admin_id,
       name,
       password: hashedPassword,
       adminType,
       profession
+    });
+
+    // 2️⃣ Create default permissions
+    await AdminPermission.create({
+      admin_id
+      // all permissions default to false automatically
     });
 
     res.status(201).json({
@@ -590,4 +598,42 @@ router.post("/adminentrytodb", async (req, res) => {
     });
   }
 });
+
+router.post("/permissions", async (req, res) => {
+  const { admin_id } = req.body;
+
+  const permissions = await AdminPermission.findOne(
+    { admin_id },
+    { 
+      _id: 0,
+      admin_id: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      __v: 0
+    }
+  );
+
+  if (!permissions) {
+    return res.json({ success: false });
+  }
+
+  res.json({
+    success: true,
+    admin_id,
+    permissions
+  });
+});
+router.post("/update-permissions", async (req, res) => {
+  const { admin_id, permissions } = req.body;
+
+  await AdminPermission.findOneAndUpdate(
+    { admin_id },
+    permissions,
+    { upsert: true }
+  );
+
+  res.json({ success: true });
+});
+
+
 module.exports = router;
