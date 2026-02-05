@@ -6,20 +6,48 @@ const BuzzerScore = require("../Models/BuzzerScore");
 const BuzzerResult = require("../Models/BuzzerResult");
 const { C1, C2, C3 } = require("../config/buzzerScore");
 
+function istToUtc(dateStr) {
+  return new Date(new Date(dateStr).getTime() - 5.5 * 60 * 60 * 1000);
+}
+
+function utcToIstString(date) {
+  return new Date(date.getTime() + 5.5 * 60 * 60 * 1000)
+    .toISOString()
+    .replace("Z", "");
+}
+
 /* =========================================================
    CREATE BUZZER GAME
 ========================================================= */
+/* =========================================================
+   CREATE BUZZER GAME  (TIMEZONE-SAFE)
+========================================================= */
 router.post("/createbuzzer", async (req, res) => {
   try {
-    const { game_name, password, total_qtns } = req.body;
+    const {
+      game_name,
+      password,
+      total_qtns,
+      start_time, // MUST include timezone: +05:30
+      duration_minutes,
+    } = req.body;
 
-    if (!game_name || !password || !total_qtns) {
+    if (!game_name || !password || !total_qtns || !start_time || !duration_minutes) {
       return res.status(400).json({
         success: false,
-        message: "All fields required"
+        message: "All fields required",
       });
     }
 
+    /* 🔐 Validate ISO with timezone */
+    if (!start_time.match(/([zZ]|[+-]\d{2}:\d{2})$/)) {
+      return res.status(400).json({
+        success: false,
+        message: "start_time must include timezone (example: +05:30)",
+      });
+    }
+
+    /* 🆔 Generate Game ID */
     const lastGame = await Buzzer.findOne().sort({ createdAt: -1 });
     let gameNumber = 1;
 
@@ -30,13 +58,16 @@ router.post("/createbuzzer", async (req, res) => {
 
     const game_id = `buzzer_${String(gameNumber).padStart(4, "0")}`;
 
+    /* ⏱️ TIME HANDLING (CORRECT) */
+    const startUTC = new Date(start_time); // auto converts to UTC
+    const endUTC = new Date(startUTC.getTime() + duration_minutes * 60000);
+
+    /* ❓ QUESTIONS */
     const qtns_array = [];
     for (let i = 1; i <= total_qtns; i++) {
       qtns_array.push({
         qtn_id: `${game_id}_Q${i}`,
-        first_submission: null,
-        second_submission: null,
-        submissions: []
+        submissions: [],
       });
     }
 
@@ -45,29 +76,37 @@ router.post("/createbuzzer", async (req, res) => {
       game_name,
       password,
       total_qtns,
-      qtns_array
+      duration_minutes,
+
+      start_time_utc: startUTC,
+      end_time_utc: endUTC,
+
+      // Optional display values (derived, not authoritative)
+      start_time_ist: startUTC.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      end_time_ist: endUTC.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+
+      qtns_array,
     });
 
     await game.save();
 
     res.json({ success: true, data: game });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
 /* =========================================================
    GET ALL GAMES
 ========================================================= */
 router.get("/all", async (req, res) => {
   try {
-    const games = await Buzzer.find();
+    const games = await Buzzer.find().sort({ start_time_utc: 1 });
     res.json({ success: true, data: games });
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
-
 /* =========================================================
    GET GAME BY ID
 ========================================================= */
@@ -79,13 +118,11 @@ router.post("/by-id", async (req, res) => {
     if (!game) {
       return res.status(404).json({ success: false, message: "Game not found" });
     }
-
     res.json({ success: true, data: game });
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
-
 /* =========================================================
    BUZZER PRESS
 ========================================================= */
