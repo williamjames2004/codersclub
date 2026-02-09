@@ -9,6 +9,7 @@ const dashboardSchema = new mongoose.Schema({
       total_points: Number,
       points_obtained: Number,
       percentage: Number,
+      submission_time: Number,
       qtns: [
         {
           qtn_id: String,
