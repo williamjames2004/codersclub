@@ -332,7 +332,10 @@ router.post("/quiz-dashboard", async (req, res) => {
         $project: {
           user_id: 1,
           total_points: "$attempted_quizzes.total_points",
-          points_obtained: "$attempted_quizzes.points_obtained"
+          points_obtained: "$attempted_quizzes.points_obtained",
+          submission_time: {
+            $ifNull: ["$attempted_quizzes.submission_time", 0]
+          }
         }
       },
 
@@ -344,7 +347,8 @@ router.post("/quiz-dashboard", async (req, res) => {
             $push: {
               user_id: "$user_id",
               total_points: "$total_points",
-              points_obtained: "$points_obtained"
+              points_obtained: "$points_obtained",
+              submission_time: "$submission_time"
             }
           },
           attended_students: { $sum: 1 },
