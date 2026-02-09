@@ -251,13 +251,16 @@ router.post("/updateQuizFlag", async (req, res) => {
 router.put("/submitanswer", async (req, res) => {
   try {
     const { user_id, attempted_quizzes } = req.body;
-    console.log("success");
 
     if (!user_id || !attempted_quizzes || !attempted_quizzes.length) {
       return res.status(400).json({ error: "Invalid request data" });
     }
 
-    const { quiz_id, qtns } = attempted_quizzes[0];
+    const {
+      quiz_id,
+      qtns,
+      submission_time
+    } = attempted_quizzes[0];
 
     if (!quiz_id || !Array.isArray(qtns) || !qtns.length) {
       return res.status(400).json({ error: "Invalid quiz or question data" });
@@ -281,6 +284,10 @@ router.put("/submitanswer", async (req, res) => {
             quiz_id,
             quiz_name,
             qtns,
+            submission_time:
+              typeof submission_time === "number" && submission_time > 0
+                ? submission_time
+                : 0,
             total_points: stats.total_points,
             points_obtained: stats.points_obtained,
             percentage: stats.percentage
@@ -289,8 +296,10 @@ router.put("/submitanswer", async (req, res) => {
       });
 
       await dashboard.save();
+
       return res.status(201).json({
         message: "Dashboard created & quiz saved",
+        quiz_id,
         ...stats
       });
     }
@@ -308,19 +317,25 @@ router.put("/submitanswer", async (req, res) => {
         quiz_id,
         quiz_name,
         qtns,
+        submission_time:
+          typeof submission_time === "number" && submission_time > 0
+            ? submission_time
+            : 0,
         total_points: stats.total_points,
         points_obtained: stats.points_obtained,
         percentage: stats.percentage
       });
 
       await dashboard.save();
+
       return res.status(200).json({
         message: "Quiz added to dashboard",
+        quiz_id,
         ...stats
       });
     }
 
-    // 6️⃣ Quiz exists → merge questions properly
+    // 6️⃣ Quiz exists → merge questions
     qtns.forEach(incomingQtn => {
       const index = quiz.qtns.findIndex(
         q => q.qtn_id === incomingQtn.qtn_id
@@ -333,7 +348,16 @@ router.put("/submitanswer", async (req, res) => {
       }
     });
 
-    // 7️⃣ Recalculate quiz stats
+    // 7️⃣ Update submission_time ONLY ON FINAL SUBMISSION
+    if (
+      typeof submission_time === "number" &&
+      submission_time > 0 &&
+      (!quiz.submission_time || quiz.submission_time === 0)
+    ) {
+      quiz.submission_time = submission_time;
+    }
+
+    // 8️⃣ Recalculate stats
     const stats = calculateQuizStats(quiz.qtns);
 
     quiz.total_points = stats.total_points;
@@ -342,7 +366,7 @@ router.put("/submitanswer", async (req, res) => {
 
     await dashboard.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Quiz updated successfully",
       quiz_id,
       ...stats
@@ -350,7 +374,7 @@ router.put("/submitanswer", async (req, res) => {
 
   } catch (err) {
     console.error("Submit Answer Error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
