@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require("mongoose");
 const Quiz = require('../Models/Quiz');
 const Dashboard = require('../Models/Dashboard');
 const User = require("../Models/User");
@@ -169,9 +170,60 @@ router.post("/update", async (req, res) => {
 router.post("/delete", async (req, res) => {
   const { quiz_id } = req.body;
 
-  await Quiz.deleteOne({ quiz_id });
+  if (!quiz_id) {
+    return res.status(400).json({
+      success: false,
+      message: "quiz_id is required",
+    });
+  }
 
-  res.json({ success: true });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1️⃣ Check if quiz exists
+    const quiz = await Quiz.findOne({ quiz_id }).session(session);
+
+    if (!quiz) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res.status(404).json({
+        success: false,
+        message: "Quiz not found",
+      });
+    }
+
+    // 2️⃣ Delete quiz from Quiz collection
+    await Quiz.deleteOne({ quiz_id }).session(session);
+
+    // 3️⃣ Remove quiz from all dashboards
+    await Dashboard.updateMany(
+      {},
+      {
+        $pull: {
+          attempted_quizzes: { quiz_id: quiz_id },
+        },
+      }
+    ).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      success: true,
+      message: "Quiz deleted successfully from Quiz and Dashboard",
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 });
 
 router.post("/by-id", async (req, res) => {
@@ -401,4 +453,3 @@ router.put("/submitanswer", async (req, res) => {
 });
 
 module.exports = router;
-
