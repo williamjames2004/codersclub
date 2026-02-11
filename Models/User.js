@@ -8,7 +8,11 @@ const userSchema = new mongoose.Schema({
   mobileno: String,
   department: String,
   password: String,
-  plain_password: String
+  plain_password: String,
+  following: {
+    type: [String],  // admin_id list
+    default: []
+  }
 });
 
 module.exports = mongoose.model("User", userSchema);
