@@ -55,7 +55,114 @@ router.post("/register", async (req, res) => {
     });
   }
 });
+router.post("/registermany", async (req, res) => {
+  try {
+    const users = req.body;
 
+    // 1️⃣ Validate array
+    if (!Array.isArray(users) || users.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Request body must be a non-empty array"
+      });
+    }
+
+    const insertedUsers = [];
+    const skippedUsers = [];
+
+    for (const data of users) {
+      const {
+        user_id,
+        username,
+        regno,
+        phoneno,
+        email,
+        department,
+        createpassword,
+        confirmpassword
+      } = data;
+
+      // 2️⃣ Required field check
+      if (
+        !user_id ||
+        !username ||
+        !regno ||
+        !email ||
+        !department ||
+        !createpassword ||
+        !confirmpassword
+      ) {
+        skippedUsers.push({
+          email,
+          reason: "Missing required fields"
+        });
+        continue;
+      }
+
+      // 3️⃣ Password mismatch
+      if (createpassword !== confirmpassword) {
+        skippedUsers.push({
+          email,
+          reason: "Password mismatch"
+        });
+        continue;
+      }
+
+      // 4️⃣ Duplicate check
+      const existingUser = await User.findOne({
+        $or: [{ email }, { regno }]
+      });
+
+      if (existingUser) {
+        skippedUsers.push({
+          email,
+          reason: "User already exists"
+        });
+        continue;
+      }
+
+      // 5️⃣ Hash password
+      const hashedPassword = await bcrypt.hash(createpassword, 10);
+
+      // 6️⃣ Create user
+      const user = await User.create({
+        user_id,
+        username,
+        regno,
+        mobileno: phoneno,
+        email,
+        department,
+        password: hashedPassword,
+        plain_password: createpassword // ⚠️ consider removing later
+      });
+
+      // 7️⃣ Create dashboard
+      await Dashboard.create({
+        user_id,
+        attempted_quizzes: [],
+        ratings: 0
+      });
+
+      insertedUsers.push(email);
+    }
+
+    res.status(200).json({
+      success: true,
+      total: users.length,
+      registered: insertedUsers.length,
+      skipped: skippedUsers.length,
+      insertedUsers,
+      skippedUsers
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 router.post("/login", async (req, res) => {
   try {
     const { user_id, password } = req.body;
@@ -185,4 +292,45 @@ router.put("/sendmessage", async (req, res) => {
     });
   }
 });
+router.post("/follow", async (req, res) => {
+  try {
+    const { user_id, admin_id } = req.body;
+
+    const user = await User.findOneAndUpdate(
+      { user_id },
+      { $addToSet: { following: admin_id } }, // prevents duplicates
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Followed successfully",
+      following: user.following
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+router.post("/unfollow", async (req, res) => {
+  try {
+    const { user_id, admin_id } = req.body;
+
+    const user = await User.findOneAndUpdate(
+      { user_id },
+      { $pull: { following: admin_id } },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Unfollowed successfully",
+      following: user.following
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 module.exports = router;
+
