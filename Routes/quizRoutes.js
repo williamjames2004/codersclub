@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Quiz = require('../Models/Quiz');
 const Dashboard = require('../Models/Dashboard');
+const User = require("../Models/User");
 
 function calculateQuizStats(qtns) {
   let total_points = 0;
@@ -185,24 +186,45 @@ router.post("/all", async (req, res) => {
   try {
     const { user_id } = req.body;
 
-    const dashboard = await Dashboard.findOne({ user_id }); 
+    // 🔹 1. Get User
+    const user = await User.findOne({ user_id });
 
-    // Case 1: No dashboard → no quizzes attempted → show all
-    if (!dashboard || dashboard.attempted_quizzes.length === 0) {
-      const quizzes = await Quiz.find();
-      return res.json(quizzes);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
     }
 
-    // Case 2: Dashboard exists → filter unattempted
-    const attemptedIds = dashboard.attempted_quizzes.map(
+    const followingAdmins = user.following || [];
+
+    // 🔹 2. Get Dashboard
+    const dashboard = await Dashboard.findOne({ user_id });
+
+    const attemptedIds = dashboard?.attempted_quizzes?.map(
       q => q.quiz_id
-    );
+    ) || [];
 
-    const quizzes = await Quiz.find({
-      quiz_id: { $nin: attemptedIds }
+    // 🔹 3. Build Filter Object
+    let filter = {};
+
+    // Filter by following admins (if any followed)
+    if (followingAdmins.length > 0) {
+      filter.created_by = { $in: followingAdmins };
+    }
+
+    // Remove attempted quizzes
+    if (attemptedIds.length > 0) {
+      filter.quiz_id = { $nin: attemptedIds };
+    }
+
+    // 🔹 4. Fetch Quizzes
+    const quizzes = await Quiz.find(filter);
+
+    res.json({
+      success: true,
+      quizzes
     });
-
-    res.json(quizzes);
 
   } catch (err) {
     res.status(500).json({
@@ -379,3 +401,4 @@ router.put("/submitanswer", async (req, res) => {
 });
 
 module.exports = router;
+
